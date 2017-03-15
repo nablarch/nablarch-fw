@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component-configuration
+    xmlns="http://tis.co.jp/nablarch/component-configuration"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://tis.co.jp/nablarch/component-configuration http://tis.co.jp/nablarch/component-configuration ">
+
+  <!-- リクエストID抽出の実装 -->
+  <component name="requestIdExtractor" class="nablarch.common.util.ShortRequestIdExtractor" />
+
+  <component name="threadContextHandler"
+      class="nablarch.common.handler.threadcontext.ThreadContextHandler">
+    <property name="attributes">
+      <list>
+        <!-- ユーザID -->
+        <component class="nablarch.common.handler.threadcontext.UserIdAttribute">
+        </component>
+        <!-- リクエストID -->
+        <component class="nablarch.common.handler.threadcontext.RequestIdAttribute" />
+        <!-- 内部リクエストID -->
+        <component class="nablarch.common.handler.threadcontext.InternalRequestIdAttribute" />
+        <!-- 言語 -->
+        <component class="nablarch.common.handler.threadcontext.LanguageAttribute">
+        </component>
+        <!-- 実行時ID -->
+        <component class="nablarch.common.handler.threadcontext.ExecutionIdAttribute" />
+        <!-- Timezone -->
+        <component class="nablarch.common.handler.threadcontext.TimeZoneAttribute" />
+      </list>
+    </property>
+  </component>
+
+</component-configuration>
