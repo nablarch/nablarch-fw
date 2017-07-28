@@ -44,7 +44,6 @@ dependencies {
 }
 
 test {
-  ignoreFailures = true
 
   jvmArgs (
       '-XX:+UseParallelGC',
