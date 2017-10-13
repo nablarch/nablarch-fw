@@ -23,9 +23,9 @@ import org.junit.Before;
 import org.junit.Test;
 
 import mockit.Delegate;
+import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
-import mockit.NonStrictExpectations;
 import mockit.Verifications;
 
 public class PipelineInvokerTest {
@@ -69,7 +69,7 @@ public class PipelineInvokerTest {
 
         final List<Set<InboundOutboundHandler>> captured = new ArrayList<Set<InboundOutboundHandler>>();
         // 正常系
-        new NonStrictExpectations() {{
+        new Expectations() {{
             firstHandler.handleInbound(context);
             result = new Result.Success();
             secondHandler.handleInbound(context);
@@ -97,12 +97,13 @@ public class PipelineInvokerTest {
         final RuntimeException e = new RuntimeException();
         
         final List<Set<InboundOutboundHandler>> captured = new ArrayList<Set<InboundOutboundHandler>>();
-        
-        new NonStrictExpectations() {{
+
+        new Expectations() {{
             firstHandler.handleInbound(context);
             result = e;
             secondHandler.handleInbound(context);
             result = new Result.Success();
+            minTimes = 0;
             context.setRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY, withCapture(captured));
             
             exceptionHandler.handleRuntimeException(e, context);
@@ -130,7 +131,7 @@ public class PipelineInvokerTest {
         final List<Set<InboundOutboundHandler>> captured = new ArrayList<Set<InboundOutboundHandler>>();
 
         final RuntimeException e = new RuntimeException();
-        new NonStrictExpectations() {{
+        new Expectations() {{
             firstHandler.handleInbound(context);
             result = new Result.Success();
             secondHandler.handleInbound(context);
@@ -164,10 +165,11 @@ public class PipelineInvokerTest {
         final List<Set<InboundOutboundHandler>> captured = new ArrayList<Set<InboundOutboundHandler>>();
         
         // 1つめのハンドラで Error 発生
-        new NonStrictExpectations() {{
+        new Expectations() {{
             firstHandler.handleInbound(context);
             result = e;
             secondHandler.handleInbound(context);
+            minTimes = 0;
             result = new Result.Success();
             
             exceptionHandler.handleError(e, context);
@@ -197,7 +199,7 @@ public class PipelineInvokerTest {
         final Error e = new Error();
 
         // 2つめのハンドラで Error 発生
-        new NonStrictExpectations() {{
+        new Expectations() {{
             firstHandler.handleInbound(context);
             result = new Result.Success();
             secondHandler.handleInbound(context);
@@ -228,10 +230,11 @@ public class PipelineInvokerTest {
         final List<Set<InboundOutboundHandler>> captured = new ArrayList<Set<InboundOutboundHandler>>();
 
         // 1つめのハンドラが Success 以外を返却
-        new NonStrictExpectations() {{
+        new Expectations() {{
             firstHandler.handleInbound(context);
             result = new NotSuccess();
             secondHandler.handleInbound(context);
+            minTimes = 0;
             result = new Result.Success();
             context.setRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY, withCapture(captured));
         }};
@@ -254,7 +257,7 @@ public class PipelineInvokerTest {
         final List<Set<InboundOutboundHandler>> captured = new ArrayList<Set<InboundOutboundHandler>>();
 
         // 2つめのハンドラが Success 以外を返却
-        new NonStrictExpectations() {{
+        new Expectations() {{
             firstHandler.handleInbound(context);
             result = new Result.Success();
             secondHandler.handleInbound(context);
@@ -280,7 +283,7 @@ public class PipelineInvokerTest {
     public void testHandleOutboundNormalCase() {
         
         // 正常系
-        new NonStrictExpectations() {{
+        new Expectations() {{
             firstHandler.handleOutbound(context);
             result = new Result.Success();
             secondHandler.handleOutbound(context);
@@ -308,9 +311,10 @@ public class PipelineInvokerTest {
     public void testHandleOutboundProcessedHandlersNotContainsFirstHandler() {
         
         // 1つ目のハンドラが processedHandlers に入っていない場合
-        new NonStrictExpectations() {{
+        new Expectations() {{
             firstHandler.handleOutbound(context);
             result = new Result.Success();
+            minTimes = 0;
             secondHandler.handleOutbound(context);
             result = new Result.Success();
             
@@ -335,11 +339,12 @@ public class PipelineInvokerTest {
     public void testHandleOutboundProcessedHandlersNotContainsSecondHandler() {
         
         // 2つ目のハンドラが processedHandlers に入っていない場合
-        new NonStrictExpectations() {{
+        new Expectations() {{
             firstHandler.handleOutbound(context);
             result = new Result.Success();
             secondHandler.handleOutbound(context);
             result = new Result.Success();
+            minTimes = 0;
             
             context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY);
             Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
@@ -362,7 +367,7 @@ public class PipelineInvokerTest {
     public void testHandleOutboundFirstHandlerResultNotSuccess() {
 
         // 1つめのハンドラの処理結果が NotSuccess
-        new NonStrictExpectations() {{
+        new Expectations() {{
             firstHandler.handleOutbound(context);
             result = new NotSuccess();
             secondHandler.handleOutbound(context);
@@ -390,7 +395,7 @@ public class PipelineInvokerTest {
     public void testHandleOutboundSecondHandlerResultNotSuccess() {
 
         // 2つめのハンドラの処理結果が NotSuccess
-        new NonStrictExpectations() {{
+        new Expectations() {{
             firstHandler.handleOutbound(context);
             result = new Result.Success();
             secondHandler.handleOutbound(context);
@@ -418,7 +423,7 @@ public class PipelineInvokerTest {
     public void testHandleOutboundBothHandlerResultNotSuccess() {
 
         // 1つめ、2つめのハンドラの処理結果が NotSuccess
-        new NonStrictExpectations() {{
+        new Expectations() {{
             firstHandler.handleOutbound(context);
             result = new NotSuccess(1);
             secondHandler.handleOutbound(context);
@@ -450,7 +455,7 @@ public class PipelineInvokerTest {
         final RuntimeException e = new RuntimeException();
 
         // 1つめのハンドラでRuntimeException発生
-        new NonStrictExpectations() {{
+        new Expectations() {{
             firstHandler.handleOutbound(context);
             result = e;
             secondHandler.handleOutbound(context);
@@ -480,7 +485,7 @@ public class PipelineInvokerTest {
         final RuntimeException e = new RuntimeException();
 
         // 1つめのハンドラでRuntimeException発生
-        new NonStrictExpectations() {{
+        new Expectations() {{
             firstHandler.handleOutbound(context);
             result = new Result.Success();
             secondHandler.handleOutbound(context);
@@ -513,7 +518,7 @@ public class PipelineInvokerTest {
         final Error e = new Error();
 
         // 1つめのハンドラでRuntimeException発生
-        new NonStrictExpectations() {{
+        new Expectations() {{
             firstHandler.handleOutbound(context);
             result = e;
             secondHandler.handleOutbound(context);
@@ -551,7 +556,7 @@ public class PipelineInvokerTest {
         final AtomicBoolean succeeded = new AtomicBoolean(true);
 
         // 2つめのハンドラでRuntimeException発生
-        new NonStrictExpectations(context) {{
+        new Expectations(context) {{
             firstHandler.handleOutbound(context);
             result = new Delegate<Result>() {
                 public Result delegate(ExecutionContext context) {
@@ -603,7 +608,7 @@ public class PipelineInvokerTest {
         final Error e = new Error();
 
         // 1つめ、2つめのハンドラ両方でRuntimeException発生
-        new NonStrictExpectations() {{
+        new Expectations() {{
             firstHandler.handleOutbound(context);
             result = e;
             secondHandler.handleOutbound(context);
@@ -644,7 +649,7 @@ public class PipelineInvokerTest {
         final Error e = new Error();
 
         // PipelineInvoker.PROCESSED_HANDLERS_KEY で値が取得できない場合。
-        new NonStrictExpectations() {{
+        new Expectations() {{
             
             context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY);
             result = null;
@@ -659,7 +664,7 @@ public class PipelineInvokerTest {
         final Error e = new Error();
 
         // ExceptionHandlerで例外が発生した場合(ほぼExceptionHandlerにバグがあった場合のみ発生する)
-        new NonStrictExpectations() {{
+        new Expectations() {{
             firstHandler.handleOutbound(context);
             result = new Result.Success();
             secondHandler.handleOutbound(context);
