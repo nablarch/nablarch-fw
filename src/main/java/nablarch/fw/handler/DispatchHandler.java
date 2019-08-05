@@ -21,6 +21,12 @@ implements Handler<TData, TResult> {
     /** ロガー */
     private static final Logger LOGGER = LoggerManager.get(DispatchHandler.class);
     
+    private HandlerFactory handlerFactory = new DefaultHandlerFactory();
+
+    public void setHandlerFactory(HandlerFactory handlerFactory) {
+        this.handlerFactory = handlerFactory;
+    }
+
     /**
      * 処理を委譲するハンドラの型を決定する。
      * 
@@ -54,7 +60,7 @@ implements Handler<TData, TResult> {
         try {
             clazz = getHandlerClass(req, ctx);
             fqn = clazz.getName();
-            delegate = clazz.newInstance();
+            delegate = handlerFactory.create(clazz);
             
             handler = createHandlerFor(delegate, ctx);
             
