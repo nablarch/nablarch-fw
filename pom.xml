@@ -18,6 +18,7 @@
     <groupId>com.nablarch</groupId>
     <artifactId>nablarch-parent</artifactId>
     <version>5u14</version>
+    <relativePath/>
   </parent>
 
   <dependencies>

@@ -20,12 +20,9 @@ public abstract class DispatchHandler<TData, TResult, TSelf extends Handler<TDat
 implements Handler<TData, TResult> {
     /** ロガー */
     private static final Logger LOGGER = LoggerManager.get(DispatchHandler.class);
-    
-    private HandlerFactory handlerFactory = new DefaultHandlerFactory();
 
-    public void setHandlerFactory(HandlerFactory handlerFactory) {
-        this.handlerFactory = handlerFactory;
-    }
+    /** ハンドラファクトリ */
+    private DelegateFactory delegateFactory = new DefaultDelegateFactory();
 
     /**
      * 処理を委譲するハンドラの型を決定する。
@@ -60,7 +57,7 @@ implements Handler<TData, TResult> {
         try {
             clazz = getHandlerClass(req, ctx);
             fqn = clazz.getName();
-            delegate = handlerFactory.create(clazz);
+            delegate = delegateFactory.create(clazz);
             
             handler = createHandlerFor(delegate, ctx);
             
@@ -153,6 +150,15 @@ implements Handler<TData, TResult> {
                                             ExecutionContext context,
                                             String fqn) {
         //nop
+    }
+
+    /**
+     * ハンドラファクトリを設定する。
+     * 明示的に設定されない場合、デフォルト実装として{@link DefaultDelegateFactory}を使用する。
+     * @param delegateFactory ハンドラファクトリ
+     */
+    public void setDelegateFactory(DelegateFactory delegateFactory) {
+        this.delegateFactory = delegateFactory;
     }
 
 }
