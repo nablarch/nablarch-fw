@@ -21,7 +21,7 @@ implements Handler<TData, TResult> {
     /** ロガー */
     private static final Logger LOGGER = LoggerManager.get(DispatchHandler.class);
 
-    /** ハンドラファクトリ */
+    /** デリゲートファクトリ */
     private DelegateFactory delegateFactory = new DefaultDelegateFactory();
 
     /**
@@ -57,6 +57,7 @@ implements Handler<TData, TResult> {
         try {
             clazz = getHandlerClass(req, ctx);
             fqn = clazz.getName();
+            // 委譲先クラスのインスタンスを生成する
             delegate = delegateFactory.create(clazz);
             
             handler = createHandlerFor(delegate, ctx);

@@ -3,7 +3,9 @@ package nablarch.fw.handler;
 import nablarch.fw.ExecutionContext;
 
 /**
- * ディスパッチ対象となるクラスのインスタンスを生成するファクトリインタフェース。
+ * 委譲先クラスのインスタンスを生成するファクトリインタフェース。
+ * 本インタフェースにて生成されたインタフェースは、
+ * {@link DispatchHandler}からディスパッチされる用途に使用される。
  *
  * @author Taichi Uragami
  * @see DispatchHandler#handle(Object, ExecutionContext)
