@@ -77,6 +77,15 @@ public class UserIdAttribute implements ThreadContextAttribute<Object> {
         return userId;
     }
 
+    /**
+     * セッションからユーザIDを取得する。
+     * デフォルトではHTTPセッションからユーザIDを取得する。
+     * 必要に応じてオーバーライドすること。
+     *
+     * @param ctx  実行コンテキスト
+     * @param skey ユーザIDのキー
+     * @return ユーザID
+     */
     protected Object getUserIdSession(ExecutionContext ctx, String skey) {
         return ctx.getSessionScopedVar(skey);
     }
