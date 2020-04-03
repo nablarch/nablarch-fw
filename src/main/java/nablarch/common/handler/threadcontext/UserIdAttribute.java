@@ -2,6 +2,7 @@ package nablarch.common.handler.threadcontext;
 
 import nablarch.core.ThreadContext;
 import nablarch.core.util.StringUtil;
+import nablarch.core.util.annotation.Published;
 import nablarch.fw.ExecutionContext;
 
 /**
@@ -13,6 +14,7 @@ import nablarch.fw.ExecutionContext;
  *
  * @author Iwauo Tajima <iwauo@tis.co.jp>
  */
+@Published
 public class UserIdAttribute implements ThreadContextAttribute<Object> {
     /**
      * ログインユーザIDが格納されているHTTPセッション上のキー名を設定する。
