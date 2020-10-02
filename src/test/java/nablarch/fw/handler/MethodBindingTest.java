@@ -171,6 +171,20 @@ public class MethodBindingTest {
         new TestMethodBinding(null, "nouse");
     }
 
+    @Test
+    public void testDelegateClassAndMethodAreSavedInRequestScope() throws Exception {
+        MethodBinding<String, String> sut = new TestMethodBinding(delegate, "hello");
+
+        sut.handle("REQUEST", context);
+
+        Class<?> clazz = context.getRequestScopedVar(MethodBinding.SCOPE_VAR_NAME_BOUND_CLASS);
+        assertThat(clazz, is((Object)delegate.getClass()));
+
+        Method method = context.getRequestScopedVar(MethodBinding.SCOPE_VAR_NAME_BOUND_METHOD);
+        Method helloMethod = delegate.getClass().getMethod("hello", String.class, ExecutionContext.class);
+        assertThat(method, is(helloMethod));
+    }
+
     public static class TestMethodBinding extends MethodBinding<String, String> {
         private final String methodName;
 
