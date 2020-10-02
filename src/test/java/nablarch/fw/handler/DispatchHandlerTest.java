@@ -8,6 +8,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
+import java.lang.reflect.Method;
 import java.util.List;
 
 import static org.hamcrest.Matchers.*;
@@ -172,6 +173,19 @@ public class DispatchHandlerTest {
 
         List<String> memory = OnMemoryLogWriter.getMessages("writer.memory");
         assertThat(memory, is(Matchers.<String>emptyIterable()));
+    }
+
+    @Test
+    public void testHandlerClassAndMethodAreSavedInRequestScope() throws Exception {
+        TestDispatchHandler sut = new TestDispatchHandler(TestHandler.class);
+        sut.handle("REQUEST", context);
+
+        Class<?> clazz = context.getRequestScopedVar(MethodBinding.SCOPE_VAR_NAME_BOUND_CLASS);
+        assertThat(clazz, is((Object)TestHandler.class));
+
+        Method method = context.getRequestScopedVar(MethodBinding.SCOPE_VAR_NAME_BOUND_METHOD);
+        Method handleMethod = TestHandler.class.getMethod("handle", Object.class, ExecutionContext.class);
+        assertThat(method, is(handleMethod));
     }
 
     public static class TestDispatchHandler extends DispatchHandler<String, String, TestDispatchHandler> {
