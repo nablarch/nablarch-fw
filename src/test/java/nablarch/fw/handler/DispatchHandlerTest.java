@@ -180,8 +180,8 @@ public class DispatchHandlerTest {
         TestDispatchHandler sut = new TestDispatchHandler(TestHandler.class);
         sut.handle("REQUEST", context);
 
-        Class<?> clazz = context.getRequestScopedVar(MethodBinding.SCOPE_VAR_NAME_BOUND_CLASS);
-        assertThat(clazz, is((Object)TestHandler.class));
+        Class<TestHandler> clazz = context.getRequestScopedVar(MethodBinding.SCOPE_VAR_NAME_BOUND_CLASS);
+        assertThat(clazz, sameInstance(TestHandler.class));
 
         Method method = context.getRequestScopedVar(MethodBinding.SCOPE_VAR_NAME_BOUND_METHOD);
         Method handleMethod = TestHandler.class.getMethod("handle", Object.class, ExecutionContext.class);
