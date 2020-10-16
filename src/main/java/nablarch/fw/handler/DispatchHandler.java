@@ -6,6 +6,8 @@ import nablarch.fw.ExecutionContext;
 import nablarch.fw.Handler;
 import nablarch.fw.Result;
 
+import java.lang.reflect.Method;
+
 /**
  * ハンドラキューの委譲チェインとは独立したルールに従って、
  * ハンドラのディスパッチを行うハンドラ(ディスパッチャ)
@@ -111,12 +113,26 @@ implements Handler<TData, TResult> {
     @SuppressWarnings({ "rawtypes", "unchecked" })
     protected Handler<TData, TResult> createHandlerFor(Object delegate, ExecutionContext ctx) {
         if (delegate instanceof Handler) {
+            try {
+                saveHandlerClassAndMethodToRequestScope(ctx, delegate);
+            } catch (NoSuchMethodException e) {
+                // 直前に Handler インタフェースを実装していることをチェックしているので、この例外は起こりえない
+                throw new RuntimeException(e);
+            }
             return (Handler) delegate;
         }
         if (ctx.getMethodBinder() != null) {
             return (Handler) ctx.getMethodBinder().bind(delegate);
         }
         return null;
+    }
+
+    private void saveHandlerClassAndMethodToRequestScope(ExecutionContext context, Object delegate) throws NoSuchMethodException {
+        Class<?> clazz = delegate.getClass();
+        context.setRequestScopedVar(MethodBinding.SCOPE_VAR_NAME_BOUND_CLASS, clazz);
+
+        Method handleMethod = clazz.getMethod("handle", Object.class, ExecutionContext.class);
+        context.setRequestScopedVar(MethodBinding.SCOPE_VAR_NAME_BOUND_METHOD, handleMethod);
     }
     
     /** ディスパッチされたハンドラの実行タイミング。 */

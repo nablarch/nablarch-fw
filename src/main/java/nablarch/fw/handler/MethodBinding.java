@@ -23,6 +23,16 @@ import nablarch.fw.Result.NotFound;
  */
 public abstract class MethodBinding<TData, TResult>
 implements HandlerWrapper<TData, TResult> {
+    // ------------------------------------------------ constants
+    /**
+     * ディスパッチ先の {@link Class} オブジェクトをリクエストスコープに保存するときのキー名。
+     */
+    public static final String SCOPE_VAR_NAME_BOUND_CLASS = "nablarch_method_binding_bound_class";
+    /**
+     * ディスパッチ先の {@link Method} オブジェクトをリクエストスコープに保存するときのキー名。
+     */
+    public static final String SCOPE_VAR_NAME_BOUND_METHOD = "nablarch_method_binding_bound_method";
+
     // ------------------------------------------------ structure
     /** ディスパッチの対象となるオブジェクト */
     private final Object delegate;
@@ -100,6 +110,7 @@ implements HandlerWrapper<TData, TResult> {
             @SuppressWarnings("unchecked")
             public TResult handle(TData req, ExecutionContext ctx) {
                 try {
+                    saveBoundClassAndMethodToRequestScope(ctx, boundMethod.getDeclaringClass(), boundMethod);
                     return (TResult) boundMethod.invoke(delegate, req, ctx);
 
                 } catch (IllegalAccessException e) {
@@ -120,6 +131,17 @@ implements HandlerWrapper<TData, TResult> {
         };
         return Interceptor.Factory.wrap(handler, boundMethod.getAnnotations())
                                   .handle(req, ctx);
+    }
+
+    /**
+     * ディスパッチ先のクラスとメソッドをリクエストスコープに記録する。
+     * @param context コンテキスト
+     * @param clazz 委譲先のクラス
+     * @param method 委譲先のメソッド
+     */
+    protected void saveBoundClassAndMethodToRequestScope(ExecutionContext context, Class<?> clazz, Method method) {
+        context.setRequestScopedVar(SCOPE_VAR_NAME_BOUND_CLASS, clazz);
+        context.setRequestScopedVar(SCOPE_VAR_NAME_BOUND_METHOD, method);
     }
     
     /** {@inheritDoc} */
