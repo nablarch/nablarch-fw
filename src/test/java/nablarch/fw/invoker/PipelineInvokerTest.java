@@ -1,11 +1,13 @@
 package nablarch.fw.invoker;
 
-import static org.hamcrest.core.Is.is;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import nablarch.fw.ExceptionHandler;
+import nablarch.fw.ExecutionContext;
+import nablarch.fw.InboundHandleable;
+import nablarch.fw.OutboundHandleable;
+import nablarch.fw.Result;
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -13,20 +15,20 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import nablarch.fw.ExceptionHandler;
-import nablarch.fw.ExecutionContext;
-import nablarch.fw.InboundHandleable;
-import nablarch.fw.OutboundHandleable;
-import nablarch.fw.Result;
-
-import org.junit.Before;
-import org.junit.Test;
-
-import mockit.Delegate;
-import mockit.Expectations;
-import mockit.Injectable;
-import mockit.Mocked;
-import mockit.Verifications;
+import static org.hamcrest.core.Is.is;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class PipelineInvokerTest {
     private PipelineInvoker target = new PipelineInvoker();
@@ -34,23 +36,17 @@ public class PipelineInvokerTest {
     private BasicPipelineListBuilder listBuilder = new BasicPipelineListBuilder();
     
     
-    @Mocked
-    private InboundOutboundHandler firstHandler;
+    private final InboundOutboundHandler firstHandler = mock(InboundOutboundHandler.class);
     
-    @Mocked
-    private InboundOutboundHandler secondHandler;
+    private final InboundOutboundHandler secondHandler = mock(InboundOutboundHandler.class);
 
-    @Mocked
-    private InboundHandleable inboundHandleable;
+    private final InboundHandleable inboundHandleable = mock(InboundHandleable.class);
 
-    @Mocked
-    private OutboundHandleable outboundHandleable;
+    private final OutboundHandleable outboundHandleable = mock(OutboundHandleable.class);
 
-    @Mocked
-    private ExceptionHandler exceptionHandler;
+    private final ExceptionHandler exceptionHandler = mock(ExceptionHandler.class, RETURNS_DEEP_STUBS);
 
-    @Injectable
-    private ExecutionContext context;
+    private ExecutionContext context = mock(ExecutionContext.class);
 
     @Before
     public void setup() {
@@ -67,27 +63,23 @@ public class PipelineInvokerTest {
     @Test
     public void testHandleInboundNormalCase() {
 
-        final List<Set<InboundOutboundHandler>> captured = new ArrayList<Set<InboundOutboundHandler>>();
         // 正常系
-        new Expectations() {{
-            firstHandler.handleInbound(context);
-            result = new Result.Success();
-            secondHandler.handleInbound(context);
-            result = new Result.Success();
-            context.setRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY, withCapture(captured));
-        }};
+        when(firstHandler.handleInbound(context)).thenReturn(new Result.Success());
+        when(secondHandler.handleInbound(context)).thenReturn(new Result.Success());
 
         assertTrue(target.invokeInbound(context).isSuccess());
 
-        new Verifications() {{
-            firstHandler.handleInbound(context);
-            times = 1;
-            secondHandler.handleInbound(context);
-            times = 1;
-        }};
+        verify(firstHandler).handleInbound(context);
+        verify(secondHandler).handleInbound(context);
 
-        assertTrue(captured.get(0).contains(firstHandler));
-        assertTrue(captured.get(0).contains(secondHandler));
+        @SuppressWarnings("unchecked")
+        final ArgumentCaptor<Set<InboundOutboundHandler>> captor = ArgumentCaptor.forClass(Set.class);
+
+        verify(context).setRequestScopedVar(eq(PipelineInvoker.PROCESSED_HANDLERS_KEY), captor.capture());
+
+        final Set<InboundOutboundHandler> captured = captor.getValue();
+        assertTrue(captured.contains(firstHandler));
+        assertTrue(captured.contains(secondHandler));
     }
 
     @Test
@@ -96,29 +88,22 @@ public class PipelineInvokerTest {
 
         final RuntimeException e = new RuntimeException();
         
-        final List<Set<InboundOutboundHandler>> captured = new ArrayList<Set<InboundOutboundHandler>>();
-
-        new Expectations() {{
-            firstHandler.handleInbound(context);
-            result = e;
-            secondHandler.handleInbound(context);
-            result = new Result.Success();
-            minTimes = 0;
-            context.setRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY, withCapture(captured));
-            
-            exceptionHandler.handleRuntimeException(e, context);
-            result = new NotSuccess();
-        }};
+        when(firstHandler.handleInbound(context)).thenThrow(e);
+        when(secondHandler.handleInbound(context)).thenReturn(new Result.Success());
+        when(exceptionHandler.handleRuntimeException(e, context)).thenReturn(new NotSuccess());
 
         assertFalse(target.invokeInbound(context).isSuccess());
 
-        new Verifications() {{
-            firstHandler.handleInbound(context);
-            times = 1;
-            secondHandler.handleInbound(context);
-            times = 0;
-            exceptionHandler.handleRuntimeException(e, context);
-        }};
+        verify(firstHandler).handleInbound(context);
+        verify(secondHandler, never()).handleInbound(context);
+        verify(exceptionHandler, atLeastOnce()).handleRuntimeException(e, context);
+
+        @SuppressWarnings("unchecked")
+        final ArgumentCaptor<Set<InboundOutboundHandler>> captor = ArgumentCaptor.forClass(Set.class);
+
+        verify(context).setRequestScopedVar(eq(PipelineInvoker.PROCESSED_HANDLERS_KEY), captor.capture());
+
+        final Set<InboundOutboundHandler> captured = captor.getValue();
 
         assertFalse(captured.contains(firstHandler));
         assertFalse(captured.contains(secondHandler));
@@ -128,33 +113,27 @@ public class PipelineInvokerTest {
     public void testHandleInboundSecondHandlerRuntimeException() {
         // 2つめのハンドラで RuntimeException 発生
 
-        final List<Set<InboundOutboundHandler>> captured = new ArrayList<Set<InboundOutboundHandler>>();
-
         final RuntimeException e = new RuntimeException();
-        new Expectations() {{
-            firstHandler.handleInbound(context);
-            result = new Result.Success();
-            secondHandler.handleInbound(context);
-            result = e;
-            
-            exceptionHandler.handleRuntimeException(e, context);
-            result = new NotSuccess();
-
-            context.setRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY, withCapture(captured));
-        }};
+        
+        when(firstHandler.handleInbound(context)).thenReturn(new Result.Success());
+        when(secondHandler.handleInbound(context)).thenThrow(e);
+        when(exceptionHandler.handleRuntimeException(e, context)).thenReturn(new NotSuccess());
 
         assertFalse(target.invokeInbound(context).isSuccess());
 
-        new Verifications() {{
-            firstHandler.handleInbound(context);
-            times = 1;
-            secondHandler.handleInbound(context);
-            times = 1;
-            exceptionHandler.handleRuntimeException(e, context);
-        }};
+        verify(firstHandler).handleInbound(context);
+        verify(secondHandler).handleInbound(context);
+        verify(exceptionHandler, atLeastOnce()).handleRuntimeException(e, context);
 
-        assertTrue(captured.get(0).contains(firstHandler));
-        assertFalse(captured.get(0).contains(secondHandler));
+        @SuppressWarnings("unchecked")
+        final ArgumentCaptor<Set<InboundOutboundHandler>> captor = ArgumentCaptor.forClass(Set.class);
+
+        verify(context).setRequestScopedVar(eq(PipelineInvoker.PROCESSED_HANDLERS_KEY), captor.capture());
+
+        final Set<InboundOutboundHandler> captured = captor.getValue();
+        
+        assertTrue(captured.contains(firstHandler));
+        assertFalse(captured.contains(secondHandler));
     }
 
     @Test
@@ -162,120 +141,96 @@ public class PipelineInvokerTest {
 
         final Error e = new Error();
         
-        final List<Set<InboundOutboundHandler>> captured = new ArrayList<Set<InboundOutboundHandler>>();
-        
         // 1つめのハンドラで Error 発生
-        new Expectations() {{
-            firstHandler.handleInbound(context);
-            result = e;
-            secondHandler.handleInbound(context);
-            minTimes = 0;
-            result = new Result.Success();
-            
-            exceptionHandler.handleError(e, context);
-            result = new NotSuccess();
-
-            context.setRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY, withCapture(captured));
-        }};
+        when(firstHandler.handleInbound(context)).thenThrow(e);
+        when(secondHandler.handleInbound(context)).thenReturn(new Result.Success());
+        when(exceptionHandler.handleError(e, context)).thenReturn(new NotSuccess());
 
         assertFalse(target.invokeInbound(context).isSuccess());
 
-        new Verifications() {{
-            firstHandler.handleInbound(context);
-            times = 1;
-            secondHandler.handleInbound(context);
-            times = 0;
-            exceptionHandler.handleError(e, context);
-        }};
+        verify(firstHandler).handleInbound(context);
+        verify(secondHandler, never()).handleInbound(context);
+        verify(exceptionHandler, atLeastOnce()).handleError(e, context);
 
+        @SuppressWarnings("unchecked")
+        final ArgumentCaptor<Set<InboundOutboundHandler>> captor = ArgumentCaptor.forClass(Set.class);
+
+        verify(context).setRequestScopedVar(eq(PipelineInvoker.PROCESSED_HANDLERS_KEY), captor.capture());
+
+        final Set<InboundOutboundHandler> captured = captor.getValue();
+        
         assertFalse(captured.contains(firstHandler));
         assertFalse(captured.contains(secondHandler));
     }
 
     @Test
     public void testHandleInboundSecondHandlerError() {
-        final List<Set<InboundOutboundHandler>> captured = new ArrayList<Set<InboundOutboundHandler>>();
-
         final Error e = new Error();
 
         // 2つめのハンドラで Error 発生
-        new Expectations() {{
-            firstHandler.handleInbound(context);
-            result = new Result.Success();
-            secondHandler.handleInbound(context);
-            result = e;
-
-            exceptionHandler.handleError(e, context);
-            result = new NotSuccess();
-
-            context.setRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY, withCapture(captured));
-        }};
+        when(firstHandler.handleInbound(context)).thenReturn(new Result.Success());
+        when(secondHandler.handleInbound(context)).thenThrow(e);
+        when(exceptionHandler.handleError(e, context)).thenReturn(new NotSuccess());
 
         assertFalse(target.invokeInbound(context).isSuccess());
 
-        new Verifications() {{
-            firstHandler.handleInbound(context);
-            times = 1;
-            secondHandler.handleInbound(context);
-            times = 1;
-            exceptionHandler.handleError(e, context);
-        }};
+        verify(firstHandler).handleInbound(context);
+        verify(secondHandler).handleInbound(context);
+        verify(exceptionHandler, atLeastOnce()).handleError(e, context);
 
-        assertTrue(captured.get(0).contains(firstHandler));
-        assertFalse(captured.get(0).contains(secondHandler));
+        @SuppressWarnings("unchecked")
+        final ArgumentCaptor<Set<InboundOutboundHandler>> captor = ArgumentCaptor.forClass(Set.class);
+
+        verify(context).setRequestScopedVar(eq(PipelineInvoker.PROCESSED_HANDLERS_KEY), captor.capture());
+
+        final Set<InboundOutboundHandler> captured = captor.getValue();
+        
+        assertTrue(captured.contains(firstHandler));
+        assertFalse(captured.contains(secondHandler));
     }
 
     @Test
     public void testHandleInboundFirstHandlerReturnNotSuccess() {
-        final List<Set<InboundOutboundHandler>> captured = new ArrayList<Set<InboundOutboundHandler>>();
-
         // 1つめのハンドラが Success 以外を返却
-        new Expectations() {{
-            firstHandler.handleInbound(context);
-            result = new NotSuccess();
-            secondHandler.handleInbound(context);
-            minTimes = 0;
-            result = new Result.Success();
-            context.setRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY, withCapture(captured));
-        }};
+        when(firstHandler.handleInbound(context)).thenReturn(new NotSuccess());
+        when(secondHandler.handleInbound(context)).thenReturn(new Result.Success());
 
         assertFalse(target.invokeInbound(context).isSuccess());
 
-        new Verifications() {{
-            firstHandler.handleInbound(context);
-            times = 1;
-            secondHandler.handleInbound(context);
-            times = 0;
-        }};
+        verify(firstHandler).handleInbound(context);
+        verify(secondHandler, never()).handleInbound(context);
 
-        assertFalse(captured.get(0).contains(firstHandler));
-        assertFalse(captured.get(0).contains(secondHandler));
+        @SuppressWarnings("unchecked")
+        final ArgumentCaptor<Set<InboundOutboundHandler>> captor = ArgumentCaptor.forClass(Set.class);
+
+        verify(context).setRequestScopedVar(eq(PipelineInvoker.PROCESSED_HANDLERS_KEY), captor.capture());
+
+        final Set<InboundOutboundHandler> captured = captor.getValue();
+        
+        assertFalse(captured.contains(firstHandler));
+        assertFalse(captured.contains(secondHandler));
     }
 
     @Test
     public void testHandleInboundSecondHandlerReturnNotSuccess() {
-        final List<Set<InboundOutboundHandler>> captured = new ArrayList<Set<InboundOutboundHandler>>();
-
         // 2つめのハンドラが Success 以外を返却
-        new Expectations() {{
-            firstHandler.handleInbound(context);
-            result = new Result.Success();
-            secondHandler.handleInbound(context);
-            result = new NotSuccess();
-            context.setRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY, withCapture(captured));
-        }};
+        when(firstHandler.handleInbound(context)).thenReturn(new Result.Success());
+        when(secondHandler.handleInbound(context)).thenReturn(new NotSuccess());
 
         assertFalse(target.invokeInbound(context).isSuccess());
 
-        new Verifications() {{
-            firstHandler.handleInbound(context);
-            times = 1;
-            secondHandler.handleInbound(context);
-            times = 1;
-        }};
+        verify(firstHandler).handleInbound(context);
+        verify(secondHandler).handleInbound(context);
 
-        assertTrue(captured.get(0).contains(firstHandler));
-        assertFalse(captured.get(0).contains(secondHandler));
+        @SuppressWarnings("unchecked")
+        final ArgumentCaptor<Set<InboundOutboundHandler>> captor = ArgumentCaptor.forClass(Set.class);
+
+        verify(context).setRequestScopedVar(eq(PipelineInvoker.PROCESSED_HANDLERS_KEY), captor.capture());
+
+        final Set<InboundOutboundHandler> captured = captor.getValue();
+        
+        assertTrue(captured.contains(firstHandler));
+        assertFalse(captured.contains(secondHandler));
     }
 
     
@@ -283,27 +238,18 @@ public class PipelineInvokerTest {
     public void testHandleOutboundNormalCase() {
         
         // 正常系
-        new Expectations() {{
-            firstHandler.handleOutbound(context);
-            result = new Result.Success();
-            secondHandler.handleOutbound(context);
-            result = new Result.Success();
-            
-            context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY);
-            Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
-            proceeded.add(firstHandler);
-            proceeded.add(secondHandler);
-            result = proceeded;
-        }};
+        when(firstHandler.handleOutbound(context)).thenReturn(new Result.Success());
+        when(secondHandler.handleOutbound(context)).thenReturn(new Result.Success());
+        
+        Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
+        proceeded.add(firstHandler);
+        proceeded.add(secondHandler);
+        when(context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY)).thenReturn(proceeded);
 
         assertTrue(target.invokeOutbound(context).isSuccess());
 
-        new Verifications() {{
-            firstHandler.handleOutbound(context);
-            times = 1;
-            secondHandler.handleOutbound(context);
-            times = 1;
-        }};
+        verify(firstHandler).handleOutbound(context);
+        verify(secondHandler).handleOutbound(context);
 
     }
 
@@ -311,27 +257,17 @@ public class PipelineInvokerTest {
     public void testHandleOutboundProcessedHandlersNotContainsFirstHandler() {
         
         // 1つ目のハンドラが processedHandlers に入っていない場合
-        new Expectations() {{
-            firstHandler.handleOutbound(context);
-            result = new Result.Success();
-            minTimes = 0;
-            secondHandler.handleOutbound(context);
-            result = new Result.Success();
-            
-            context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY);
-            Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
-            proceeded.add(secondHandler);
-            result = proceeded;
-        }};
+        when(firstHandler.handleOutbound(context)).thenReturn(new Result.Success());
+        when(secondHandler.handleOutbound(context)).thenReturn(new Result.Success());
+
+        Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
+        proceeded.add(secondHandler);
+        when(context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY)).thenReturn(proceeded);
 
         assertTrue(target.invokeOutbound(context).isSuccess());
 
-        new Verifications() {{
-            firstHandler.handleOutbound(context);
-            times = 0;
-            secondHandler.handleOutbound(context);
-            times = 1;
-        }};
+        verify(firstHandler, never()).handleOutbound(context);
+        verify(secondHandler).handleOutbound(context);
 
     }
 
@@ -339,27 +275,17 @@ public class PipelineInvokerTest {
     public void testHandleOutboundProcessedHandlersNotContainsSecondHandler() {
         
         // 2つ目のハンドラが processedHandlers に入っていない場合
-        new Expectations() {{
-            firstHandler.handleOutbound(context);
-            result = new Result.Success();
-            secondHandler.handleOutbound(context);
-            result = new Result.Success();
-            minTimes = 0;
-            
-            context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY);
-            Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
-            proceeded.add(firstHandler);
-            result = proceeded;
-        }};
+        when(firstHandler.handleOutbound(context)).thenReturn(new Result.Success());
+        when(secondHandler.handleOutbound(context)).thenReturn(new Result.Success());
 
+        Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
+        proceeded.add(firstHandler);
+        when(context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY)).thenReturn(proceeded);
+        
         assertTrue(target.invokeOutbound(context).isSuccess());
 
-        new Verifications() {{
-            firstHandler.handleOutbound(context);
-            times = 1;
-            secondHandler.handleOutbound(context);
-            times = 0;
-        }};
+        verify(firstHandler).handleOutbound(context);
+        verify(secondHandler, never()).handleOutbound(context);
 
     }
 
@@ -367,27 +293,18 @@ public class PipelineInvokerTest {
     public void testHandleOutboundFirstHandlerResultNotSuccess() {
 
         // 1つめのハンドラの処理結果が NotSuccess
-        new Expectations() {{
-            firstHandler.handleOutbound(context);
-            result = new NotSuccess();
-            secondHandler.handleOutbound(context);
-            result = new Result.Success();
+        when(firstHandler.handleOutbound(context)).thenReturn(new NotSuccess());
+        when(secondHandler.handleOutbound(context)).thenReturn(new Result.Success());
 
-            context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY);
-            Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
-            proceeded.add(firstHandler);
-            proceeded.add(secondHandler);
-            result = proceeded;
-        }};
+        Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
+        proceeded.add(firstHandler);
+        proceeded.add(secondHandler);
+        when(context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY)).thenReturn(proceeded);
 
         assertFalse(target.invokeOutbound(context).isSuccess());
 
-        new Verifications() {{
-            firstHandler.handleOutbound(context);
-            times = 1;
-            secondHandler.handleOutbound(context);
-            times = 1;
-        }};
+        verify(firstHandler).handleOutbound(context);
+        verify(secondHandler).handleOutbound(context);
 
     }
 
@@ -395,27 +312,19 @@ public class PipelineInvokerTest {
     public void testHandleOutboundSecondHandlerResultNotSuccess() {
 
         // 2つめのハンドラの処理結果が NotSuccess
-        new Expectations() {{
-            firstHandler.handleOutbound(context);
-            result = new Result.Success();
-            secondHandler.handleOutbound(context);
-            result = new NotSuccess();
+        when(firstHandler.handleOutbound(context)).thenReturn(new Result.Success());
+        when(secondHandler.handleOutbound(context)).thenReturn(new NotSuccess());
 
-            context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY);
-            Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
-            proceeded.add(firstHandler);
-            proceeded.add(secondHandler);
-            result = proceeded;
-        }};
+
+        Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
+        proceeded.add(firstHandler);
+        proceeded.add(secondHandler);
+        when(context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY)).thenReturn(proceeded);
 
         assertFalse(target.invokeOutbound(context).isSuccess());
 
-        new Verifications() {{
-            firstHandler.handleOutbound(context);
-            times = 1;
-            secondHandler.handleOutbound(context);
-            times = 1;
-        }};
+        verify(firstHandler).handleOutbound(context);
+        verify(secondHandler).handleOutbound(context);
 
     }
 
@@ -423,30 +332,21 @@ public class PipelineInvokerTest {
     public void testHandleOutboundBothHandlerResultNotSuccess() {
 
         // 1つめ、2つめのハンドラの処理結果が NotSuccess
-        new Expectations() {{
-            firstHandler.handleOutbound(context);
-            result = new NotSuccess(1);
-            secondHandler.handleOutbound(context);
-            result = new NotSuccess(2);
+        when(firstHandler.handleOutbound(context)).thenReturn(new NotSuccess(1));
+        when(secondHandler.handleOutbound(context)).thenReturn(new NotSuccess(2));
 
-            context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY);
-            Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
-            proceeded.add(firstHandler);
-            proceeded.add(secondHandler);
-            result = proceeded;
-        }};
+        Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
+        proceeded.add(firstHandler);
+        proceeded.add(secondHandler);
+        when(context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY)).thenReturn(proceeded);
 
         NotSuccess result = (NotSuccess) target.invokeOutbound(context);
         
         // 先に処理される2つ目のハンドラが結果としてもどる。
         assertEquals(2, result.no);
 
-        new Verifications() {{
-            firstHandler.handleOutbound(context);
-            times = 1;
-            secondHandler.handleOutbound(context);
-            times = 1;
-        }};
+        verify(firstHandler).handleOutbound(context);
+        verify(secondHandler).handleOutbound(context);
 
     }
 
@@ -455,28 +355,19 @@ public class PipelineInvokerTest {
         final RuntimeException e = new RuntimeException();
 
         // 1つめのハンドラでRuntimeException発生
-        new Expectations() {{
-            firstHandler.handleOutbound(context);
-            result = e;
-            secondHandler.handleOutbound(context);
-            result = new Result.Success();
+        when(firstHandler.handleOutbound(context)).thenThrow(e);
+        when(secondHandler.handleOutbound(context)).thenReturn(new Result.Success());
 
-            context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY);
-            Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
-            proceeded.add(firstHandler);
-            proceeded.add(secondHandler);
-            result = proceeded;
-        }};
+        Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
+        proceeded.add(firstHandler);
+        proceeded.add(secondHandler);
+        when(context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY)).thenReturn(proceeded);
 
         assertFalse(target.invokeOutbound(context).isSuccess());
 
-        new Verifications() {{
-            firstHandler.handleOutbound(context);
-            times = 1;
-            secondHandler.handleOutbound(context);
-            times = 1;
-            exceptionHandler.handleRuntimeException(e, context);
-        }};
+        verify(firstHandler).handleOutbound(context);
+        verify(secondHandler).handleOutbound(context);
+        verify(exceptionHandler, atLeastOnce()).handleRuntimeException(e, context);
 
     }
 
@@ -485,31 +376,21 @@ public class PipelineInvokerTest {
         final RuntimeException e = new RuntimeException();
 
         // 1つめのハンドラでRuntimeException発生
-        new Expectations() {{
-            firstHandler.handleOutbound(context);
-            result = new Result.Success();
-            secondHandler.handleOutbound(context);
-            result = e;
+        when(firstHandler.handleOutbound(context)).thenReturn(new Result.Success());
+        when(secondHandler.handleOutbound(context)).thenThrow(e);
 
-            exceptionHandler.handleRuntimeException(e, context);
-            result = new NotSuccess();
-            
-            context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY);
-            Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
-            proceeded.add(firstHandler);
-            proceeded.add(secondHandler);
-            result = proceeded;
-        }};
+        when(exceptionHandler.handleRuntimeException(e, context)).thenReturn(new NotSuccess());
+
+        Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
+        proceeded.add(firstHandler);
+        proceeded.add(secondHandler);
+        when(context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY)).thenReturn(proceeded);
 
         assertFalse(target.invokeOutbound(context).isSuccess());
 
-        new Verifications() {{
-            firstHandler.handleOutbound(context);
-            times = 1;
-            secondHandler.handleOutbound(context);
-            times = 1;
-            exceptionHandler.handleRuntimeException(e, context);
-        }};
+        verify(firstHandler).handleOutbound(context);
+        verify(secondHandler).handleOutbound(context);
+        verify(exceptionHandler, atLeastOnce()).handleRuntimeException(e, context);
 
     }
 
@@ -518,69 +399,47 @@ public class PipelineInvokerTest {
         final Error e = new Error();
 
         // 1つめのハンドラでRuntimeException発生
-        new Expectations() {{
-            firstHandler.handleOutbound(context);
-            result = e;
-            secondHandler.handleOutbound(context);
-            result = new Result.Success();
+        when(firstHandler.handleOutbound(context)).thenThrow(e);
+        when(secondHandler.handleOutbound(context)).thenReturn(new Result.Success());
+        when(exceptionHandler.handleError(e, context)).thenReturn(new NotSuccess());
 
-            exceptionHandler.handleError(e, context);
-            result = new NotSuccess();
-            
-            context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY);
-            Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
-            proceeded.add(firstHandler);
-            proceeded.add(secondHandler);
-            result = proceeded;
-        }};
+        Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
+        proceeded.add(firstHandler);
+        proceeded.add(secondHandler);
+        when(context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY)).thenReturn(proceeded);
 
         assertFalse(target.invokeOutbound(context).isSuccess());
 
-        new Verifications() {{
-            firstHandler.handleOutbound(context);
-            times = 1;
-            secondHandler.handleOutbound(context);
-            times = 1;
-            exceptionHandler.handleError(e, context);
-        }};
+        verify(firstHandler).handleOutbound(context);
+        verify(secondHandler).handleOutbound(context);
+        verify(exceptionHandler, atLeastOnce()).handleError(e, context);
 
     }
 
     @Test
     public void testHandleOutboundSecondHandlerError() {
         // mockは使わない
-        context = new ExecutionContext();
+        context = spy(new ExecutionContext());
         context.setProcessSucceeded(true);
         final Error e = new Error();
 
         final AtomicBoolean succeeded = new AtomicBoolean(true);
 
         // 2つめのハンドラでRuntimeException発生
-        new Expectations(context) {{
-            firstHandler.handleOutbound(context);
-            result = new Delegate<Result>() {
-                public Result delegate(ExecutionContext context) {
-                    // 後続のハンドラのOutboundで例外が発生しているので、
-                    // Contextの状態は正常ではない
-                    succeeded.set(context.isProcessSucceeded());
-                    return new Result.Success();
-                }
-            };
-            secondHandler.handleOutbound(context);
-            result = e;
+        when(firstHandler.handleOutbound(context)).then((ctx) -> {
+            // 後続のハンドラのOutboundで例外が発生しているので、
+            // Contextの状態は正常ではない
+            final ExecutionContext context = ctx.getArgument(0);
+            succeeded.set(context.isProcessSucceeded());
+            return new Result.Success();
+        });
+        when(secondHandler.handleOutbound(context)).thenThrow(e);
+        when(exceptionHandler.handleError(e, context)).thenReturn(new NotSuccess()).thenThrow(e);
 
-            exceptionHandler.handleError(e, context);
-            result = new NotSuccess();
-            
-            exceptionHandler.handleError(e, context);
-            result = e;
-            
-            context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY);
-            Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
-            proceeded.add(firstHandler);
-            proceeded.add(secondHandler);
-            result = proceeded;
-        }};
+        Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
+        proceeded.add(firstHandler);
+        proceeded.add(secondHandler);
+        when(context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY)).thenReturn(proceeded);
 
         try {
             assertFalse(target.invokeOutbound(context).isSuccess());
@@ -592,14 +451,9 @@ public class PipelineInvokerTest {
         assertThat("firstHandlerでの状態は異常状態になっていること", succeeded.get(), is(false));
         assertThat("contextの状態は異常終了状態", context.isProcessSucceeded(), is(false));
 
-        new Verifications() {{
-            firstHandler.handleOutbound(context);
-            times = 1;
-            secondHandler.handleOutbound(context);
-            times = 1;
-            exceptionHandler.handleError(e, context);
-            times = 1;
-        }};
+        verify(firstHandler).handleOutbound(context);
+        verify(secondHandler).handleOutbound(context);
+        verify(exceptionHandler).handleError(e, context);
 
     }
 
@@ -608,24 +462,14 @@ public class PipelineInvokerTest {
         final Error e = new Error();
 
         // 1つめ、2つめのハンドラ両方でRuntimeException発生
-        new Expectations() {{
-            firstHandler.handleOutbound(context);
-            result = e;
-            secondHandler.handleOutbound(context);
-            result = e;
+        when(firstHandler.handleOutbound(context)).thenThrow(e);
+        when(secondHandler.handleOutbound(context)).thenThrow(e);
+        when(exceptionHandler.handleError(e, context)).thenReturn(new NotSuccess()).thenThrow(e);
 
-            exceptionHandler.handleError(e, context);
-            result = new NotSuccess();
-            
-            exceptionHandler.handleError(e, context);
-            result = e;
-            
-            context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY);
-            Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
-            proceeded.add(firstHandler);
-            proceeded.add(secondHandler);
-            result = proceeded;
-        }};
+        Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
+        proceeded.add(firstHandler);
+        proceeded.add(secondHandler);
+        when(context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY)).thenReturn(proceeded);
 
         try {
             assertFalse(target.invokeOutbound(context).isSuccess());
@@ -634,13 +478,9 @@ public class PipelineInvokerTest {
             
         }
 
-        new Verifications() {{
-            firstHandler.handleOutbound(context);
-            times = 1;
-            secondHandler.handleOutbound(context);
-            times = 1;
-            exceptionHandler.handleError(e, context);
-        }};
+        verify(firstHandler).handleOutbound(context);
+        verify(secondHandler).handleOutbound(context);
+        verify(exceptionHandler, atLeastOnce()).handleError(e, context);
 
     }
 
@@ -649,11 +489,7 @@ public class PipelineInvokerTest {
         final Error e = new Error();
 
         // PipelineInvoker.PROCESSED_HANDLERS_KEY で値が取得できない場合。
-        new Expectations() {{
-            
-            context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY);
-            result = null;
-        }};
+        when(context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY)).thenReturn(null);
 
         assertTrue(target.invokeOutbound(context).isSuccess());
 
@@ -664,24 +500,14 @@ public class PipelineInvokerTest {
         final Error e = new Error();
 
         // ExceptionHandlerで例外が発生した場合(ほぼExceptionHandlerにバグがあった場合のみ発生する)
-        new Expectations() {{
-            firstHandler.handleOutbound(context);
-            result = new Result.Success();
-            secondHandler.handleOutbound(context);
-            result = e;
+        when(firstHandler.handleOutbound(context)).thenReturn(new Result.Success());
+        when(secondHandler.handleOutbound(context)).thenThrow(e);
+        when(exceptionHandler.handleError(e, context)).thenThrow(new RuntimeException());
 
-            exceptionHandler.handleError(e, context);
-            result = new NotSuccess();
-            
-            exceptionHandler.handleError(e, context);
-            result = new RuntimeException();
-            
-            context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY);
-            Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
-            proceeded.add(firstHandler);
-            proceeded.add(secondHandler);
-            result = proceeded;
-        }};
+        Set<InboundOutboundHandler> proceeded = new HashSet<InboundOutboundHandler>();
+        proceeded.add(firstHandler);
+        proceeded.add(secondHandler);
+        when(context.getRequestScopedVar(PipelineInvoker.PROCESSED_HANDLERS_KEY)).thenReturn(proceeded);
 
         try {
             assertFalse(target.invokeOutbound(context).isSuccess());
@@ -690,13 +516,9 @@ public class PipelineInvokerTest {
             
         }
 
-        new Verifications() {{
-            firstHandler.handleOutbound(context);
-            times = 1;
-            secondHandler.handleOutbound(context);
-            times = 1;
-            exceptionHandler.handleError(e, context);
-        }};
+        verify(firstHandler).handleOutbound(context);
+        verify(secondHandler).handleOutbound(context);
+        verify(exceptionHandler, atLeastOnce()).handleError(e, context);
 
     }
 
@@ -708,10 +530,7 @@ public class PipelineInvokerTest {
 
         assertTrue(target.invokeOutbound(context).isSuccess());
 
-        new Verifications() {{
-            outboundHandleable.handleOutbound(context);
-            times = 0;
-        }};
+        verify(outboundHandleable, never()).handleOutbound(context);
     }
 
     @Test
@@ -722,10 +541,7 @@ public class PipelineInvokerTest {
 
         assertTrue(target.invokeOutbound(context).isSuccess());
 
-        new Verifications() {{
-            inboundHandleable.handleInbound(context);
-            times = 0;
-        }};
+        verify(inboundHandleable, never()).handleInbound(context);
     }
 
     private static class NotSuccess implements Result {
